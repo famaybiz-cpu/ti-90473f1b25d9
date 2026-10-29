@@ -517,7 +517,7 @@ function vSet(){
   $('#exp').onclick=()=>{const b=new Blob([JSON.stringify(S)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='tarjetas-progreso-'+new Date().toISOString().slice(0,10)+'.json';a.click()};
   $('#imp').onclick=()=>$('#file').click();
   $('#file').onchange=e=>{const f=e.target.files[0];if(!f)return;f.text().then(t=>{try{const j=JSON.parse(t);if(!j.c)throw 0;S=j;S.set={...DEF_SET,...S.set};save();applyTheme();toast('Progreso importado');render()}catch(_){toast('Archivo no válido')}})};
-  $('#lock').onclick=()=>{try{localStorage.removeItem('tf_data')}catch(e){}location.reload()};
+  $('#lock').onclick=async()=>{await idbDel();try{localStorage.removeItem('tf_data')}catch(e){}location.reload()};
   $('#rst').onclick=()=>{if(confirm('¿Borrar TODO tu progreso? No se puede deshacer.')){S={c:{},log:{},nd:{day:0,n:0,extra:0},rd:{day:0,n:0},set:{...DEF_SET}};save();render()}};
 }
 
@@ -526,6 +526,11 @@ else render();
 setInterval(()=>{if($('#study').classList.contains('hidden')&&tab==='home')rollover()},60000);
 if('serviceWorker' in navigator)addEventListener('load',()=>navigator.serviceWorker.register('sw.js').catch(()=>{}));
 }
+
+const idbp=()=>new Promise((ok,no)=>{const r=indexedDB.open('tf_cache',1);r.onupgradeneeded=()=>r.result.createObjectStore('d');r.onsuccess=()=>ok(r.result);r.onerror=()=>no(r.error)});
+async function idbGet(){try{const db=await idbp();return await new Promise(ok=>{const g=db.transaction('d').objectStore('d').get('x');g.onsuccess=()=>ok(g.result||null);g.onerror=()=>ok(null)})}catch(e){return null}}
+async function idbSet(v){try{const db=await idbp();await new Promise(ok=>{const t=db.transaction('d','readwrite');t.objectStore('d').put(v,'x');t.oncomplete=ok;t.onerror=ok})}catch(e){}}
+async function idbDel(){try{const db=await idbp();await new Promise(ok=>{const t=db.transaction('d','readwrite');t.objectStore('d').delete('x');t.oncomplete=ok;t.onerror=ok})}catch(e){}}
 /* ============ candado: el contenido está cifrado (AES-256-GCM) ============ */
 async function decryptData(pass,E){
   const b=s=>Uint8Array.from(atob(s),c=>c.charCodeAt(0));
@@ -534,13 +539,13 @@ async function decryptData(pass,E){
   const pt=await crypto.subtle.decrypt({name:'AES-GCM',iv:b(E.i)},key,b(E.c));
   return new TextDecoder().decode(pt);
 }
-(function gate(){
+(async function gate(){
   /* limpia la copia que este navegador guardó de la versión anterior (sin cifrar) */
   try{
     if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>{if(/\/tarjetas-internado\/$/.test(r.scope))r.unregister()}));
     if(window.caches)caches.delete('tf-v1');
   }catch(e){}
-  let txt=null;try{txt=localStorage.getItem('tf_data')}catch(e){}
+  let txt=await idbGet();try{localStorage.removeItem('tf_data')}catch(e){}
   if(txt){try{window.TF_DATA=JSON.parse(txt);return main()}catch(e){}}
   const V=document.getElementById('view');document.getElementById('tabs').style.display='none';
   V.innerHTML=`<div class="hero" style="padding-top:12vh;text-align:center"><div class="orn">✿ ✿ ✿</div><div class="hello" style="margin-top:8px">Tarjetas<br>del Internado</div></div>
@@ -553,7 +558,7 @@ async function decryptData(pass,E){
     try{
       const plain=await decryptData(document.getElementById('pw').value,window.TF_ENC);
       window.TF_DATA=JSON.parse(plain);
-      if(document.getElementById('rem').checked){try{localStorage.setItem('tf_data',plain)}catch(e){}}
+      if(document.getElementById('rem').checked){await idbSet(plain)}
       document.getElementById('tabs').style.display='';main();
     }catch(e){m.textContent='Clave incorrecta'}
   };
