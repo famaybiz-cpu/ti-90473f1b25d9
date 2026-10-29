@@ -535,6 +535,11 @@ async function decryptData(pass,E){
   return new TextDecoder().decode(pt);
 }
 (function gate(){
+  /* limpia la copia que este navegador guardó de la versión anterior (sin cifrar) */
+  try{
+    if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>{if(/\/tarjetas-internado\/$/.test(r.scope))r.unregister()}));
+    if(window.caches)caches.delete('tf-v1');
+  }catch(e){}
   let txt=null;try{txt=localStorage.getItem('tf_data')}catch(e){}
   if(txt){try{window.TF_DATA=JSON.parse(txt);return main()}catch(e){}}
   const V=document.getElementById('view');document.getElementById('tabs').style.display='none';
