@@ -545,11 +545,17 @@ async function decryptData(pass,E){
     if('serviceWorker' in navigator)navigator.serviceWorker.getRegistrations().then(rs=>rs.forEach(r=>{if(/\/tarjetas-internado\/$/.test(r.scope))r.unregister()}));
     if(window.caches)caches.delete('tf-v1');
   }catch(e){}
-  let txt=await idbGet();try{localStorage.removeItem('tf_data')}catch(e){}
-  if(txt){try{window.TF_DATA=JSON.parse(txt);return main()}catch(e){}}
+  /* La copia guardada se usa solo si es de la MISMA versión de las tarjetas. Si llegaron
+     tarjetas nuevas, se descifran solas con la clave recordada (antes se quedaba con la vieja). */
+  let g=await idbGet();try{localStorage.removeItem('tf_data')}catch(e){}
+  if(typeof g==='string')g={plain:g,s:null,p:null};
+  const E=window.TF_ENC;
+  if(g&&g.plain&&(!E||g.s===E.s)){try{window.TF_DATA=JSON.parse(g.plain);return main()}catch(e){}}
+  if(g&&g.p&&E){try{const plain=await decryptData(g.p,E);window.TF_DATA=JSON.parse(plain);await idbSet({plain,s:E.s,p:g.p});return main()}catch(e){}}
+  const nuevas=!!(g&&g.plain);
   const V=document.getElementById('view');document.getElementById('tabs').style.display='none';
   V.innerHTML=`<div class="hero" style="padding-top:12vh;text-align:center"><div class="orn">✿ ✿ ✿</div><div class="hello" style="margin-top:8px">Tarjetas<br>del Internado</div></div>
-  <div class="panel"><p class="note" style="margin:0 0 10px;text-align:center">Contenido protegido. Escribe tu clave para abrirlo.</p>
+  <div class="panel"><p class="note" style="margin:0 0 10px;text-align:center">${nuevas?'✨ Hay tarjetas nuevas. Escribe tu clave una vez más: desde ahora se actualizan solas.':'Contenido protegido. Escribe tu clave para abrirlo.'}</p>
   <input class="search" id="pw" type="password" placeholder="Clave" autocomplete="off" autocapitalize="none" autocorrect="off" spellcheck="false">
   <label class="note" style="display:flex;gap:8px;align-items:center;margin:12px 0"><input type="checkbox" id="rem" checked> Recordar en este dispositivo</label>
   <button class="big" id="go">Abrir</button><p class="note" id="msg" style="text-align:center;margin:10px 0 0;color:var(--again)"></p></div>`;
@@ -558,7 +564,7 @@ async function decryptData(pass,E){
     try{
       const plain=await decryptData(document.getElementById('pw').value,window.TF_ENC);
       window.TF_DATA=JSON.parse(plain);
-      if(document.getElementById('rem').checked){await idbSet(plain)}
+      if(document.getElementById('rem').checked){await idbSet({plain,s:window.TF_ENC.s,p:document.getElementById('pw').value})}
       document.getElementById('tabs').style.display='';main();
     }catch(e){m.textContent='Clave incorrecta'}
   };
